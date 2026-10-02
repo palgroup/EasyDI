@@ -140,8 +140,8 @@ private func buildPlugin(named name: String, source code: String) throws -> URL 
     compiler.executableURL = URL(filePath: "/usr/bin/xcrun")
     compiler.arguments = [
         "swiftc", "-emit-library", "-parse-as-library", "-swift-version", "6", "-module-name", name,
-        "-I", build.appending(path: "Modules").path,
-        "-load-plugin-executable", build.appending(path: "EasyDIMacros-tool").path + "#EasyDIMacros",
+        "-I", build.modules.path,
+        "-load-plugin-executable", build.macroPlugin.path + "#EasyDIMacros",
         "-Xlinker", "-undefined", "-Xlinker", "dynamic_lookup",
         source.path, "-o", library.path,
     ]
@@ -157,17 +157,32 @@ private func buildPlugin(named name: String, source code: String) throws -> URL 
     return library
 }
 
-/// Where SwiftPM put this test bundle: `<build>/EasyDIPackageTests.xctest/Contents/MacOS/…`.
-private func buildDirectory() throws -> URL {
+/// Where this test's modules and macro plugin are. SwiftPM's native build puts them
+/// in `<build>/Modules` and `<build>/EasyDIMacros-tool`; Swift Build (6.4) puts the
+/// modules in `<build>` itself and names the plugin `EasyDIMacros`. `<build>` holds
+/// the test bundle: `<build>/<bundle>.xctest/Contents/MacOS/<binary>`.
+private struct BuildDirectory {
+    let modules: URL
+    let macroPlugin: URL
+}
+
+private func buildDirectory() throws -> BuildDirectory {
     var info = Dl_info()
     guard dladdr(unsafeBitCast(countRun, to: UnsafeRawPointer.self), &info) != 0, let name = info.dli_fname else {
         throw PluginBuildFailed(log: "can't find the test bundle")
     }
-    return URL(filePath: String(cString: name))
+    let build = URL(filePath: String(cString: name))
         .deletingLastPathComponent()
         .deletingLastPathComponent()
         .deletingLastPathComponent()
         .deletingLastPathComponent()
+    let files = FileManager.default
+    let modules = build.appending(path: "Modules")
+    let tool = build.appending(path: "EasyDIMacros-tool")
+    return BuildDirectory(
+        modules: files.fileExists(atPath: modules.path) ? modules : build,
+        macroPlugin: files.fileExists(atPath: tool.path) ? tool : build.appending(path: "EasyDIMacros")
+    )
 }
 
 private struct PluginBuildFailed: Error, CustomStringConvertible {
