@@ -31,6 +31,9 @@ final class Container {
     private(set) var mocks: [ObjectIdentifier: [AnyMock]] = [:]
     private var contractsByType: [ObjectIdentifier: Set<ObjectIdentifier>] = [:]
     private var recordsRun = 0
+    /// In a preview: whether the record classes were run (see ``__PreviewRecord``).
+    private var previewRecordsRun = false
+    private var reloadingPreviewRecords = false
     private var building: [Frame] = []
     private var selections: [Injection.Selection] = []
 
@@ -75,6 +78,10 @@ final class Container {
 
     /// Runs the records found since the last call.
     func load() {
+        if isPreview, !previewRecordsRun {
+            previewRecordsRun = true
+            PreviewRecords.run()
+        }
         guard Registry.found.load(ordering: .acquiring) != recordsRun else { return }
         let addresses = Registry.pending.withLock { pending in
             defer { pending.removeAll() }
@@ -140,6 +147,10 @@ final class Container {
             fatalError("EasyDI: \(contract) has \(options.count) providers: \(names). Keep one @Injectable(as: \(contract).self).")
         }
         guard let provider = options.first else {
+            // The canvas may have loaded code since the record classes were run.
+            if isPreview, reloadPreviewRecords() {
+                return self.provider(for: key)
+            }
             let contract = name(of: Value.self)
             let onlyMocks = mocks[key].map { _ in " Its mocks are used only in previews and under .mock(…)." } ?? ""
             fatalError("EasyDI: nothing provides \(contract). Mark the type that does with @Injectable(as: \(contract).self).\(onlyMocks)")
@@ -224,6 +235,18 @@ final class Container {
         return frame.value
     }
 
+    /// Runs the record classes again, once per miss: true when that registered
+    /// something new, so the caller looks again.
+    private func reloadPreviewRecords() -> Bool {
+        guard !reloadingPreviewRecords else { return false }
+        reloadingPreviewRecords = true
+        defer { reloadingPreviewRecords = false }
+        let before = registered.values.reduce(0) { $0 + $1.count } + mocks.values.reduce(0) { $0 + $1.count }
+        PreviewRecords.run()
+        let after = registered.values.reduce(0) { $0 + $1.count } + mocks.values.reduce(0) { $0 + $1.count }
+        return after > before
+    }
+
     // MARK: Selection
 
     func with<Result>(_ selection: Injection.Selection, _ build: () -> Result) -> Result {
@@ -254,6 +277,9 @@ final class Container {
         load()
         let candidates = contract.map { mocks[$0] ?? [] } ?? mocks.values.flatMap { $0 }
         guard !candidates.contains(where: { $0.name == name }) else { return }
+        if isPreview, reloadPreviewRecords() {
+            return requireMock(named: name, for: contract, contractName: contractName)
+        }
         let known = Set(candidates.compactMap(\.name)).sorted().map { "\"\($0)\"" }
         let scope = contractName.map { " for \($0)" } ?? ""
         let list = known.isEmpty ? "There are no named mocks\(scope)." : "Named mocks\(scope): \(known.joined(separator: ", "))."

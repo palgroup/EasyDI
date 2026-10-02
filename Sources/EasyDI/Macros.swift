@@ -11,12 +11,12 @@
 /// built with `init()`. The type must conform to the contract; the compiler checks it.
 /// One provider per contract: a second one stops the app, naming both, the first
 /// time the contract is asked for.
-@attached(member, names: named(__easyDIRecord))
+@attached(member, names: named(__easyDIRecord), named(__EasyDIRecord))
 public macro Injectable(as contract: Any.Type, _ lifetime: Lifetime = .singleton) =
     #externalMacro(module: "EasyDIMacros", type: "InjectableMacro")
 
 /// Registers a type as the provider of itself: `@Inject private var clock: Clock`.
-@attached(member, names: named(__easyDIRecord))
+@attached(member, names: named(__easyDIRecord), named(__EasyDIRecord))
 public macro Injectable(_ lifetime: Lifetime = .singleton) =
     #externalMacro(module: "EasyDIMacros", type: "InjectableMacro")
 
@@ -33,6 +33,6 @@ public macro Injectable(_ lifetime: Lifetime = .singleton) =
 /// A preview with nothing selected uses the default mock (the provider if there is
 /// none); `.mock("failing")` picks a named one for a screen and everything it opens.
 /// The app never uses a mock unless it is selected.
-@attached(peer, names: prefixed(__easyDIMock_))
+@attached(peer, names: prefixed(__easyDIMock_), prefixed(__EasyDIMock_))
 public macro Mock(_ contract: Any.Type, _ name: String? = nil) =
     #externalMacro(module: "EasyDIMacros", type: "MockMacro")

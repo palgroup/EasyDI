@@ -12,7 +12,7 @@ private let macros: [String: MacroSpec] = [
 
 @Suite("Macro expansion")
 struct MacroExpansionTests {
-    @Test("@Injectable(as:_:) leaves a section record that builds the type as the contract")
+    @Test("@Injectable(as:_:) leaves a record class that builds the type as the contract, and points at it from the section")
     func injectable() {
         expand(
             """
@@ -23,11 +23,17 @@ struct MacroExpansionTests {
             into: """
             final class LiveNoteService: NoteService {
 
+                private nonisolated final class __EasyDIRecord: EasyDI.__PreviewRecord {
+                    override class func register() {
+                        EasyDI.__register((any NoteService).self, provider: LiveNoteService.self, contractName: "NoteService", providerName: "LiveNoteService", lifetime: .weak) {
+                            LiveNoteService()
+                        }
+                    }
+                }
+
                 @section("__DATA,__easydi") @used
                 private nonisolated static let __easyDIRecord: @convention(c) () -> Void = {
-                    EasyDI.__register((any NoteService).self, provider: LiveNoteService.self, contractName: "NoteService", providerName: "LiveNoteService", lifetime: .weak) {
-                        LiveNoteService()
-                    }
+                    __EasyDIRecord.register()
                 }
             }
             """
@@ -45,11 +51,17 @@ struct MacroExpansionTests {
             into: """
             struct Clock {
 
+                private nonisolated final class __EasyDIRecord: EasyDI.__PreviewRecord {
+                    override class func register() {
+                        EasyDI.__register(Clock.self, provider: Clock.self, contractName: "Clock", providerName: "Clock", lifetime: .singleton) {
+                            Clock()
+                        }
+                    }
+                }
+
                 @section("__DATA,__easydi") @used
                 private nonisolated static let __easyDIRecord: @convention(c) () -> Void = {
-                    EasyDI.__register(Clock.self, provider: Clock.self, contractName: "Clock", providerName: "Clock", lifetime: .singleton) {
-                        Clock()
-                    }
+                    __EasyDIRecord.register()
                 }
             }
             """
@@ -68,11 +80,17 @@ struct MacroExpansionTests {
             final class MockNoteService: NoteService {
             }
 
+            private nonisolated final class __EasyDIMock_MockNoteService: EasyDI.__PreviewRecord {
+                override class func register() {
+                    EasyDI.__registerMock((any NoteService).self, name: nil, type: MockNoteService.self, contractName: "NoteService", label: "MockNoteService") {
+                        MockNoteService()
+                    }
+                }
+            }
+
             @section("__DATA,__easydi") @used
             private nonisolated let __easyDIMock_MockNoteService: @convention(c) () -> Void = {
-                EasyDI.__registerMock((any NoteService).self, name: nil, type: MockNoteService.self, contractName: "NoteService", label: "MockNoteService") {
-                    MockNoteService()
-                }
+                __EasyDIMock_MockNoteService.register()
             }
             """
         )
@@ -91,11 +109,17 @@ struct MacroExpansionTests {
             extension MockNoteService {
                 static var failing: MockNoteService { MockNoteService(scenario: .failing) }
 
+                private nonisolated final class __EasyDIMock_failing: EasyDI.__PreviewRecord {
+                    override class func register() {
+                        EasyDI.__registerMock((any NoteService).self, name: "failing", type: MockNoteService.self, contractName: "NoteService", label: "MockNoteService.failing") {
+                            MockNoteService.failing
+                        }
+                    }
+                }
+
                 @section("__DATA,__easydi") @used
                 private nonisolated static let __easyDIMock_failing: @convention(c) () -> Void = {
-                    EasyDI.__registerMock((any NoteService).self, name: "failing", type: MockNoteService.self, contractName: "NoteService", label: "MockNoteService.failing") {
-                        MockNoteService.failing
-                    }
+                    __EasyDIMock_failing.register()
                 }
             }
             """
@@ -115,11 +139,17 @@ struct MacroExpansionTests {
             enum Mocks {
                 static var empty: any NoteService { EmptyNotes() }
 
+                private nonisolated final class __EasyDIMock_empty: EasyDI.__PreviewRecord {
+                    override class func register() {
+                        EasyDI.__registerMock((any NoteService).self, name: "empty", type: nil, contractName: "NoteService", label: "Mocks.empty") {
+                            Mocks.empty
+                        }
+                    }
+                }
+
                 @section("__DATA,__easydi") @used
                 private nonisolated static let __easyDIMock_empty: @convention(c) () -> Void = {
-                    EasyDI.__registerMock((any NoteService).self, name: "empty", type: nil, contractName: "NoteService", label: "Mocks.empty") {
-                        Mocks.empty
-                    }
+                    __EasyDIMock_empty.register()
                 }
             }
             """

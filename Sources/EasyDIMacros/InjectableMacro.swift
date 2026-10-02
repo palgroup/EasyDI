@@ -4,8 +4,10 @@ public import SwiftSyntaxMacros
 
 /// `@Injectable(as: NoteService.self, .weak)` on a class, struct or actor.
 ///
-/// Adds a record to the `__DATA,__easydi` section of the binary. EasyDI reads the
-/// section of every loaded image, so the type is registered without a central list.
+/// Adds a record class that registers the type, and a pointer to it in the
+/// `__DATA,__easydi` section of the binary. EasyDI reads that section in every
+/// loaded image, so the type is registered without a central list; in Xcode's
+/// canvas, which loads code dyld doesn't see, it finds the record classes instead.
 /// The record builds the type with `init()`; building it as the contract is what
 /// checks, at compile time, that the type conforms to it.
 public struct InjectableMacro: MemberMacro {
@@ -27,13 +29,20 @@ public struct InjectableMacro: MemberMacro {
         }
         return [
             """
-            @section("__DATA,__easydi") @used
-            private nonisolated static let __easyDIRecord: @convention(c) () -> Void = {
-                EasyDI.__register(\(raw: contract), provider: \(raw: provider.name).self, contractName: \(literal: named ?? provider.name), providerName: \(literal: provider.name), lifetime: \(raw: lifetime)) {
-                    \(raw: provider.name)()
+            private nonisolated final class __EasyDIRecord: EasyDI.__PreviewRecord {
+                override class func register() {
+                    EasyDI.__register(\(raw: contract), provider: \(raw: provider.name).self, contractName: \(literal: named ?? provider.name), providerName: \(literal: provider.name), lifetime: \(raw: lifetime)) {
+                        \(raw: provider.name)()
+                    }
                 }
             }
+            """,
             """
+            @section("__DATA,__easydi") @used
+            private nonisolated static let __easyDIRecord: @convention(c) () -> Void = {
+                __EasyDIRecord.register()
+            }
+            """,
         ]
     }
 }

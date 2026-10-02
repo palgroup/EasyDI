@@ -41,25 +41,32 @@ public struct MockMacro: PeerMacro {
             } else {
                 type = "nil"
             }
-            recordName = "__easyDIMock_\(property)"
+            recordName = property
             isMember = true
         } else {
             let mock = try ProvidedType(declaration, macro: "@Mock", context: context)
             make = "\(mock.name)()"
             label = mock.name
             type = "\(mock.name).self"
-            recordName = "__easyDIMock_\(mock.name)"
+            recordName = mock.name
             isMember = owner != nil
         }
         return [
             """
-            @section("__DATA,__easydi") @used
-            private nonisolated \(raw: isMember ? "static " : "")let \(raw: recordName): @convention(c) () -> Void = {
-                EasyDI.__registerMock(\(raw: existential(contractName)), name: \(raw: name), type: \(raw: type), contractName: \(literal: contractName), label: \(literal: label)) {
-                    \(raw: make)
+            private nonisolated final class __EasyDIMock_\(raw: recordName): EasyDI.__PreviewRecord {
+                override class func register() {
+                    EasyDI.__registerMock(\(raw: existential(contractName)), name: \(raw: name), type: \(raw: type), contractName: \(literal: contractName), label: \(literal: label)) {
+                        \(raw: make)
+                    }
                 }
             }
+            """,
             """
+            @section("__DATA,__easydi") @used
+            private nonisolated \(raw: isMember ? "static " : "")let __easyDIMock_\(raw: recordName): @convention(c) () -> Void = {
+                __EasyDIMock_\(raw: recordName).register()
+            }
+            """,
         ]
     }
 }

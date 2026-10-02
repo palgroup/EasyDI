@@ -2,6 +2,17 @@
 
 All notable changes to EasyDI are documented here.
 
+## [1.0.1] — 2026-10-02
+
+### Fixed
+
+- **Nothing was registered in Xcode's canvas**, so every preview that
+  injected something stopped with "nothing provides …". The canvas loads the
+  app's code with its own JIT linker, which dyld doesn't see, so the
+  `__DATA,__easydi` section was never read. The macros now also write each
+  record as a class; in a preview EasyDI finds those classes through the
+  Objective-C runtime. The app outside previews still reads the section.
+
 ## [1.0.0] — 2026-10-02
 
 First release.

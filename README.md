@@ -199,6 +199,13 @@ every image already loaded and for each one loaded later, such as a framework
 opened with `dlopen` or the code a preview loads. The callback reads the
 section, and the records run on the main actor.
 
+Xcode's canvas doesn't load the app's code through dyld: its JIT linker maps
+the code, and dyld only sees an empty placeholder for it. So the macros also
+write every record as a small class. In a preview (`XCODE_RUNNING_FOR_PREVIEWS`
+is set), EasyDI finds those classes through the Objective-C runtime on the
+first resolution, which takes about 0.15 s with the 80,000 classes of a preview
+process. If a contract is still missing, it looks again before stopping.
+
 Resolution is synchronous, on the main actor, while the owner is initialised.
 That is why a provider's dependencies can be checked as it is built, and why
 `Injected` can apply a screen's selection while the screen's data is made.
@@ -225,8 +232,9 @@ gauge shows:
   growth of 0–32 KB.
 
 The tests pass under `leaks` (0 leaks) and under Address and Thread
-Sanitizer. They run on macOS with Swift 6.3.3 and 6.4.0 (62 tests), and on the
-iOS Simulator (35: the stops, the macro expansions and the sheet need macOS).
+Sanitizer. They run on macOS with Swift 6.3.3 and 6.4.0 (65 tests), and on the
+iOS Simulator (35: the stops, the macro expansions, the sheet and the libraries
+compiled during the test need macOS).
 
 ## Limits
 
