@@ -13,8 +13,8 @@ final class Container {
 
     /// An instance being built, and what its building asked for.
     private struct Frame {
-        /// The provider's type; `nil` for a mock.
-        let type: ObjectIdentifier?
+        /// The provider or mock being built.
+        let id: ObjectIdentifier
         let name: String
         let lifetime: Lifetime
         /// Every contract resolved while it was built, its dependencies' too.
@@ -43,15 +43,31 @@ final class Container {
 
     // MARK: Registration
 
+    // The same type registered again is the same provider, not a second one: a
+    // preview that loads its code again brings that code's records again. The
+    // newer record replaces the older.
+
     func add(_ provider: AnyProvider) {
-        registered[provider.contract, default: []].append(provider)
+        var known = registered[provider.contract] ?? []
+        if let index = known.firstIndex(where: { $0.type == provider.type }) {
+            known[index] = provider
+        } else {
+            known.append(provider)
+        }
+        registered[provider.contract] = known
         // Found again on the next request, which checks it is still the only one.
         providers[provider.contract] = nil
         contractsByType[provider.type, default: []].insert(provider.contract)
     }
 
     func add(_ mock: AnyMock) {
-        mocks[mock.contract, default: []].append(mock)
+        var known = mocks[mock.contract] ?? []
+        if let index = known.firstIndex(where: { $0.name == mock.name && $0.label == mock.label && $0.type == mock.type }) {
+            known[index] = mock
+        } else {
+            known.append(mock)
+        }
+        mocks[mock.contract] = known
         if let type = mock.type {
             contractsByType[type, default: []].insert(mock.contract)
         }
@@ -80,26 +96,35 @@ final class Container {
                 building[index].dependencies.insert(key)
             }
         }
-        if let selection = selections.last {
-            if let instance = selection.instances[key] {
-                markSelectionUsed()
-                return cast(instance.value)
-            }
-            if let name = selection.mockName(for: key, among: mocks[key] ?? []) {
-                markSelectionUsed()
-                return mock(key, named: name)
+        if let answer = selections.last?.answer(for: key, among: mocks[key] ?? []) {
+            markSelectionUsed()
+            switch answer {
+            case .instance(let value): return cast(value)
+            case .mock(let name): return mock(key, named: name)
             }
         }
         if isPreview, mocks[key]?.contains(where: { $0.name == nil }) == true {
             return mock(key, named: nil)
         }
         let provider: Provider<Value> = provider(for: key)
-        if let owner = building.last, owner.lifetime == .singleton, provider.lifetime == .weak {
-            assertionFailure(
-                "EasyDI: \(owner.name) is a .singleton, it lives as long as the app, but it takes \(provider.name), which is .weak: it would never be released. Make \(provider.name) .singleton or \(owner.name) .weak."
-            )
+        if provider.lifetime == .weak {
+            requireNotCaptive(provider.name)
         }
         return instance(of: provider)
+    }
+
+    /// What holds a `.weak` instance must not live for the whole app. A `.transient`
+    /// in between doesn't change that: the `.singleton` keeps it, and it keeps the
+    /// `.weak` one.
+    private func requireNotCaptive(_ name: String) {
+        guard let index = building.lastIndex(where: { $0.lifetime != .transient }),
+              building[index].lifetime == .singleton else { return }
+        let owner = building[index].name
+        let between = building[(index + 1)...].map(\.name)
+        let through = between.isEmpty ? "" : " through \(between.joined(separator: " → "))"
+        assertionFailure(
+            "EasyDI: \(owner) is a .singleton, it lives as long as the app, but\(through) it takes \(name), which is .weak: it would never be released. Make \(name) .singleton or \(owner) .weak."
+        )
     }
 
     private func provider<Value>(for key: ObjectIdentifier) -> Provider<Value> {
@@ -124,16 +149,19 @@ final class Container {
     }
 
     private func instance<Value>(of provider: Provider<Value>) -> Value {
+        // A selection that replaces a dependency of a kept instance gets one of its
+        // own, which isn't kept: the app's instance stays the app's.
+        let reached = !selections.isEmpty && selectionReaches(provider.dependencies)
         switch provider.lifetime {
         case .singleton:
-            if let kept = provider.kept, !selectionReaches(provider) { return kept }
+            if let kept = provider.kept, !reached { return kept }
             let (value, usedSelection) = build(provider)
-            if !usedSelection { provider.kept = value }
+            if !usedSelection, !reached { provider.kept = value }
             return value
         case .weak:
-            if let shared = provider.shared, !selectionReaches(provider) { return cast(shared) }
+            if let shared = provider.shared, !reached { return cast(shared) }
             let (value, usedSelection) = build(provider)
-            if !usedSelection { provider.shared = value as AnyObject }
+            if !usedSelection, !reached { provider.shared = value as AnyObject }
             return value
         case .transient:
             return build(provider).value
@@ -141,16 +169,33 @@ final class Container {
     }
 
     private func build<Value>(_ provider: Provider<Value>) -> (value: Value, usedSelection: Bool) {
-        if let start = building.firstIndex(where: { $0.type == provider.type }) {
-            let path = (building[start...].map(\.name) + [provider.name]).joined(separator: " → ")
+        let frame = building(ObjectIdentifier(provider), named: provider.name, lifetime: provider.lifetime) {
+            provider.make()
+        }
+        // Every contract it was ever seen to ask for: a build that skipped one
+        // (an `if` in an initialiser) must not hide it from a later selection.
+        if !frame.dependencies.isEmpty {
+            provider.dependencies.formUnion(frame.dependencies)
+        }
+        provider.made += 1
+        return (frame.value, frame.usedSelection)
+    }
+
+    /// Runs `make` as the innermost thing being built, stopping on a cycle.
+    private func building<Value>(
+        _ id: ObjectIdentifier,
+        named name: String,
+        lifetime: Lifetime,
+        _ make: () -> Value
+    ) -> (value: Value, dependencies: Set<ObjectIdentifier>, usedSelection: Bool) {
+        if let start = building.firstIndex(where: { $0.id == id }) {
+            let path = (building[start...].map(\.name) + [name]).joined(separator: " → ")
             fatalError("EasyDI: \(path) is a cycle: each one needs the next to be built. Break it, for example by passing one of them in as a parameter.")
         }
-        building.append(Frame(type: provider.type, name: provider.name, lifetime: provider.lifetime))
-        let value = provider.make()
+        building.append(Frame(id: id, name: name, lifetime: lifetime))
+        let value = make()
         let frame = building.removeLast()
-        provider.dependencies = frame.dependencies
-        provider.made += 1
-        return (value, frame.usedSelection)
+        return (value, frame.dependencies, frame.usedSelection)
     }
 
     private func mock<Value>(_ contract: ObjectIdentifier, named name: String?) -> Value {
@@ -164,15 +209,19 @@ final class Container {
             fatalError("EasyDI: \(found.contractName) has \(what): \(labels). Keep one.")
         }
         let mock = unsafeDowncast(found, to: Mock<Value>.self)
-        if let shared = mock.shared { return cast(shared) }
-        building.append(Frame(type: nil, name: mock.label, lifetime: .transient))
-        let value = mock.make()
-        let frame = building.removeLast()
+        let reached = !selections.isEmpty && selectionReaches(mock.dependencies)
+        if let shared = mock.shared, !reached { return cast(shared) }
         // Shared while something holds it, like a `.weak` provider; a value type is made each time.
-        if !frame.usedSelection, Swift.type(of: value as Any) is AnyClass {
-            mock.shared = value as AnyObject
+        let frame = building(ObjectIdentifier(mock), named: mock.label, lifetime: .weak) {
+            mock.make()
         }
-        return value
+        if !frame.dependencies.isEmpty {
+            mock.dependencies.formUnion(frame.dependencies)
+        }
+        if !frame.usedSelection, !reached, Swift.type(of: frame.value as Any) is AnyClass {
+            mock.shared = frame.value as AnyObject
+        }
+        return frame.value
     }
 
     // MARK: Selection
@@ -195,11 +244,10 @@ final class Container {
         }
     }
 
-    /// A kept instance was built without the current selection; it is built again
-    /// for the selection when the selection replaces one of its dependencies.
-    private func selectionReaches(_ provider: AnyProvider) -> Bool {
-        guard let selection = selections.last else { return false }
-        return provider.dependencies.contains { selection.replaces($0, among: mocks[$0] ?? []) }
+    /// Whether the current selection replaces one of `dependencies`.
+    private func selectionReaches(_ dependencies: Set<ObjectIdentifier>) -> Bool {
+        guard let selection = selections.last, !dependencies.isEmpty else { return false }
+        return dependencies.contains { selection.answer(for: $0, among: mocks[$0] ?? []) != nil }
     }
 
     func requireMock(named name: String, for contract: ObjectIdentifier?, contractName: String?) {
@@ -297,6 +345,8 @@ class AnyMock {
     let type: ObjectIdentifier?
     /// How a message names it: `MockNoteService` or `MockNoteService.failing`.
     let label: String
+    /// Every contract resolved while it was built, its dependencies' too.
+    var dependencies: Set<ObjectIdentifier> = []
 
     init(contract: ObjectIdentifier, contractName: String, name: String?, type: ObjectIdentifier?, label: String) {
         self.contract = contract

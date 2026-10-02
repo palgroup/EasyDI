@@ -48,6 +48,57 @@ struct StopTests {
         ))
     }
 
+    @Test("A .singleton takes something .weak through a .transient")
+    func singletonTakesWeakThroughTransient() async {
+        let result = await #expect(processExitsWith: .failure, observing: [\.standardErrorContent]) {
+            await MainActor.run { let _: any FarOwner = resolve() }
+        }
+        let message = text(result?.standardErrorContent)
+        #expect(message.contains(
+            "EasyDI: FarOwnerImpl is a .singleton, it lives as long as the app, but through MiddleImpl it takes FarWeakImpl, which is .weak"
+        ))
+    }
+
+    @Test("Mocks that need each other")
+    func mockCycle() async {
+        let result = await #expect(processExitsWith: .failure, observing: [\.standardErrorContent]) {
+            setenv("XCODE_RUNNING_FOR_PREVIEWS", "1", 1)
+            await MainActor.run { let _: any MockCycleA = resolve() }
+        }
+        let message = text(result?.standardErrorContent)
+        #expect(message.contains("EasyDI: MockCycleAImpl → MockCycleBImpl → MockCycleAImpl is a cycle"))
+    }
+
+    @Test("Two mocks with one name for one contract")
+    func duplicateNamedMocks() async {
+        let result = await #expect(processExitsWith: .failure, observing: [\.standardErrorContent]) {
+            await MainActor.run { let _: any Named = Injection.with(.mock("same")) { resolve() } }
+        }
+        let message = text(result?.standardErrorContent)
+        #expect(message.contains("EasyDI: Named has two mocks named \"same\": "))
+        #expect(message.contains("FirstNamed.same") && message.contains("SecondNamed.same"))
+    }
+
+    @Test(".mock(_:for:) with a name that contract has no mock by")
+    func unknownMockNameForContract() async {
+        let result = await #expect(processExitsWith: .failure, observing: [\.standardErrorContent]) {
+            await MainActor.run { _ = Injection.with(.mock("nope", for: (any NoteStore).self)) { 0 } }
+        }
+        let message = text(result?.standardErrorContent)
+        #expect(message.contains(
+            "EasyDI: .mock(\"nope\") — no mock for NoteStore is named \"nope\". Named mocks for NoteStore: \"empty\", \"failing\"."
+        ))
+    }
+
+    @Test(".inject with an instance of a type registered for two contracts")
+    func injectAmbiguous() async {
+        let result = await #expect(processExitsWith: .failure, observing: [\.standardErrorContent]) {
+            await MainActor.run { _ = Injection.with(.inject(DoubleDuty())) { 0 } }
+        }
+        let message = text(result?.standardErrorContent)
+        #expect(message.contains("EasyDI: .inject(DoubleDuty) — DoubleDuty stands for 2 contracts. Name the contract"))
+    }
+
     @Test("Providers that need each other")
     func cycle() async {
         let result = await #expect(processExitsWith: .failure, observing: [\.standardErrorContent]) {
@@ -76,9 +127,8 @@ struct StopTests {
             }
         }
         let message = text(result?.standardErrorContent)
-        #expect(message.contains(
-            "EasyDI: .mock(\"faling\") — no mock is named \"faling\". Named mocks: \"empty\", \"failing\"."
-        ))
+        #expect(message.contains("EasyDI: .mock(\"faling\") — no mock is named \"faling\". Named mocks: "))
+        #expect(message.contains("\"empty\", ") && message.contains("\"failing\", "))
     }
 
     @Test(".inject with an instance of a type registered nowhere")

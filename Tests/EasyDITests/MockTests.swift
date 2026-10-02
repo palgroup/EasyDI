@@ -84,4 +84,48 @@ struct MockTests {
         #expect(selected.store.scenario == "failing")
         #expect(appAgain === app)
     }
+
+    @Test("Selections in sequence never replace the app's kept instance")
+    func selectionsInSequence() {
+        let top: any ChainTop = resolve()
+        let fake = FakeChainStorage()
+        let repoWithFake: any ChainRepo = Injection.with(.inject(fake, as: (any ChainStorage).self)) { resolve() }
+        let offline: any ChainTop = Injection.with(.mock("chain-offline")) { resolve() }
+        let again: any ChainTop = resolve()
+        #expect(repoWithFake.storage === fake)
+        #expect(offline.repo.storage.http.mode == "offline")
+        #expect(again === top)
+        #expect(again.repo.storage.http.mode == "live")
+    }
+
+    @Test("A shared mock is built again when a selection replaces one of its dependencies")
+    func sharedMockFollowsSelection() {
+        let first: any Gadget = Injection.with(.mock("gadget")) { resolve() }
+        let second: any Gadget = Injection.with(.mock("gadget"), .mock("special-part")) { resolve() }
+        #expect(first.part.kind == "live")
+        #expect(second.part.kind == "special")
+        #expect(first !== second)
+    }
+
+    @Test("For each contract the innermost choice wins, whatever its kind")
+    func innermostWins() {
+        let mine = MockNoteStore(scenario: "mine")
+        let named: NotesData = Injection.with(.mock("failing", for: (any NoteStore).self), .mock("empty")) { NotesData() }
+        let overInstance: NotesData = Injection.with(.inject(mine), .mock("empty")) { NotesData() }
+        let instance: NotesData = Injection.with(.mock("empty"), .inject(mine)) { NotesData() }
+        #expect(named.store.scenario == "empty")
+        #expect(overInstance.store.scenario == "empty")
+        #expect(instance.store === mine)
+    }
+
+    @Test("Injected values are the same while equal objects or Hashable values; others are new each time")
+    func injectedIdentity() {
+        let store = MockNoteStore(scenario: "one")
+        #expect(Injection.Selection.inject(store) == .inject(store))
+        #expect(Injection.Selection.inject(MockNoteStore()) != .inject(MockNoteStore()))
+        let dark = HashableSettings(theme: "dark")
+        #expect(Injection.Selection.inject(dark, as: (any Settings).self) == .inject(dark, as: (any Settings).self))
+        let plain = PlainSettings(theme: "dark")
+        #expect(Injection.Selection.inject(plain, as: (any Settings).self) != .inject(plain, as: (any Settings).self))
+    }
 }

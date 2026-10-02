@@ -24,7 +24,7 @@ struct MacroExpansionTests {
             final class LiveNoteService: NoteService {
 
                 @section("__DATA,__easydi") @used
-                nonisolated static let __easyDIRecord: @convention(c) () -> Void = {
+                private nonisolated static let __easyDIRecord: @convention(c) () -> Void = {
                     EasyDI.__register((any NoteService).self, provider: LiveNoteService.self, contractName: "NoteService", providerName: "LiveNoteService", lifetime: .weak) {
                         LiveNoteService()
                     }
@@ -46,7 +46,7 @@ struct MacroExpansionTests {
             struct Clock {
 
                 @section("__DATA,__easydi") @used
-                nonisolated static let __easyDIRecord: @convention(c) () -> Void = {
+                private nonisolated static let __easyDIRecord: @convention(c) () -> Void = {
                     EasyDI.__register(Clock.self, provider: Clock.self, contractName: "Clock", providerName: "Clock", lifetime: .singleton) {
                         Clock()
                     }
@@ -69,7 +69,7 @@ struct MacroExpansionTests {
             }
 
             @section("__DATA,__easydi") @used
-            nonisolated let __easyDIMock_MockNoteService: @convention(c) () -> Void = {
+            private nonisolated let __easyDIMock_MockNoteService: @convention(c) () -> Void = {
                 EasyDI.__registerMock((any NoteService).self, name: nil, type: MockNoteService.self, contractName: "NoteService", label: "MockNoteService") {
                     MockNoteService()
                 }
@@ -92,7 +92,7 @@ struct MacroExpansionTests {
                 static var failing: MockNoteService { MockNoteService(scenario: .failing) }
 
                 @section("__DATA,__easydi") @used
-                nonisolated static let __easyDIMock_failing: @convention(c) () -> Void = {
+                private nonisolated static let __easyDIMock_failing: @convention(c) () -> Void = {
                     EasyDI.__registerMock((any NoteService).self, name: "failing", type: MockNoteService.self, contractName: "NoteService", label: "MockNoteService.failing") {
                         MockNoteService.failing
                     }
@@ -116,7 +116,7 @@ struct MacroExpansionTests {
                 static var empty: any NoteService { EmptyNotes() }
 
                 @section("__DATA,__easydi") @used
-                nonisolated static let __easyDIMock_empty: @convention(c) () -> Void = {
+                private nonisolated static let __easyDIMock_empty: @convention(c) () -> Void = {
                     EasyDI.__registerMock((any NoteService).self, name: "empty", type: nil, contractName: "NoteService", label: "Mocks.empty") {
                         Mocks.empty
                     }

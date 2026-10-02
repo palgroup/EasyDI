@@ -54,7 +54,7 @@ public struct MockMacro: PeerMacro {
         return [
             """
             @section("__DATA,__easydi") @used
-            nonisolated \(raw: isMember ? "static " : "")let \(raw: recordName): @convention(c) () -> Void = {
+            private nonisolated \(raw: isMember ? "static " : "")let \(raw: recordName): @convention(c) () -> Void = {
                 EasyDI.__registerMock(\(raw: existential(contractName)), name: \(raw: name), type: \(raw: type), contractName: \(literal: contractName), label: \(literal: label)) {
                     \(raw: make)
                 }

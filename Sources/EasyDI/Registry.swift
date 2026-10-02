@@ -70,7 +70,8 @@ public nonisolated func __register<Contract>(
     lifetime: Lifetime,
     make: @escaping @MainActor @Sendable () -> Contract
 ) {
-    let contract = ObjectIdentifier(contract)
+    // Keyed by the static type, which is what `Provider<Contract>` is downcast to.
+    let contract = ObjectIdentifier(Contract.self)
     let type = ObjectIdentifier(provider)
     MainActor.assumeIsolated {
         Container.shared.add(
@@ -88,7 +89,7 @@ public nonisolated func __registerMock<Contract>(
     label: String,
     make: @escaping @MainActor @Sendable () -> Contract
 ) {
-    let contract = ObjectIdentifier(contract)
+    let contract = ObjectIdentifier(Contract.self)
     let type = type.map(ObjectIdentifier.init)
     MainActor.assumeIsolated {
         Container.shared.add(

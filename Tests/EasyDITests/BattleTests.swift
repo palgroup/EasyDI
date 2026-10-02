@@ -30,6 +30,7 @@ struct BattleTests {
         }
         Container.shared.load()
         #expect(recordsRun.load(ordering: .relaxed) - before == threads * perThread)
+        #expect(recordsRunOffMain.load(ordering: .relaxed) == 0)
     }
 
     #if os(macOS)
@@ -80,8 +81,13 @@ nonisolated let memoryLimit = 1_048_576
 
 nonisolated let recordsRun = Atomic<Int>(0)
 
+nonisolated let recordsRunOffMain = Atomic<Int>(0)
+
 nonisolated let countRun: @convention(c) () -> Void = {
     recordsRun.add(1, ordering: .relaxed)
+    if pthread_main_np() == 0 {
+        recordsRunOffMain.add(1, ordering: .relaxed)
+    }
 }
 
 /// `count` resolutions, a third each of .singleton, .weak and .transient, and a selection every tenth.

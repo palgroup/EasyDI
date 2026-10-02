@@ -16,7 +16,8 @@ First release.
   `.inject(_:as:)` choose mocks and instances for a screen and the screens it
   opens. `Injection.with(_:build:)` does the same outside SwiftUI.
 - Two providers for one contract, a missing provider, a `.singleton` taking a
-  `.weak`, a dependency cycle, two default mocks and an unknown mock name stop
-  the app with a message naming what to fix.
+  `.weak` (directly or through `.transient`s), a cycle of providers or mocks,
+  two mocks with one name and an unknown mock name stop the app with a message
+  naming what to fix.
 - `Injection.registrations` lists every contract, its provider, its mocks and
   whether an instance is alive.

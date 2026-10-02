@@ -55,6 +55,24 @@ struct ResolutionTests {
         #expect(nested is Outer.NestedProvider)
     }
 
+    @Test("The same type registered again, as a preview reloading its code does, is one provider")
+    func registeredAgain() {
+        for _ in 0..<2 {
+            EasyDI.__register(
+                (any Reloaded).self,
+                provider: ReloadedImpl.self,
+                contractName: "Reloaded",
+                providerName: "ReloadedImpl",
+                lifetime: .singleton
+            ) {
+                ReloadedImpl()
+            }
+        }
+        @Inject var reloaded: any Reloaded
+        #expect(reloaded is ReloadedImpl)
+        #expect(Injection.registrations.filter { $0.contract == "Reloaded" }.count == 1)
+    }
+
     @Test("@Injectable and @Observable work on the same class")
     func observable() {
         @Inject var session: any Session

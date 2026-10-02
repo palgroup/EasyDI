@@ -28,7 +28,7 @@ public struct InjectableMacro: MemberMacro {
         return [
             """
             @section("__DATA,__easydi") @used
-            nonisolated static let __easyDIRecord: @convention(c) () -> Void = {
+            private nonisolated static let __easyDIRecord: @convention(c) () -> Void = {
                 EasyDI.__register(\(raw: contract), provider: \(raw: provider.name).self, contractName: \(literal: named ?? provider.name), providerName: \(literal: provider.name), lifetime: \(raw: lifetime)) {
                     \(raw: provider.name)()
                 }

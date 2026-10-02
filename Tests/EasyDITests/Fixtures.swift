@@ -187,6 +187,108 @@ final class LiveInbox: Inbox {
     @Inject var store: any NoteStore
 }
 
+/// A chain of `.singleton`s, to check that selections in sequence never replace the app's.
+protocol ChainTop: AnyObject {
+    var repo: any ChainRepo { get }
+}
+
+protocol ChainRepo: AnyObject {
+    var storage: any ChainStorage { get }
+}
+
+protocol ChainStorage: AnyObject {
+    var http: any ChainHTTP { get }
+}
+
+protocol ChainHTTP: AnyObject {
+    var mode: String { get }
+}
+
+@Injectable(as: ChainTop.self)
+final class ChainTopImpl: ChainTop {
+    @Inject var repo: any ChainRepo
+}
+
+@Injectable(as: ChainRepo.self)
+final class ChainRepoImpl: ChainRepo {
+    @Inject var storage: any ChainStorage
+}
+
+@Injectable(as: ChainStorage.self)
+final class ChainStorageImpl: ChainStorage {
+    @Inject var http: any ChainHTTP
+}
+
+@Injectable(as: ChainHTTP.self)
+final class LiveChainHTTP: ChainHTTP {
+    let mode = "live"
+}
+
+extension LiveChainHTTP {
+    @Mock(ChainHTTP.self, "chain-offline")
+    static var offline: any ChainHTTP { StubChainHTTP(mode: "offline") }
+}
+
+final class StubChainHTTP: ChainHTTP {
+    let mode: String
+
+    init(mode: String) {
+        self.mode = mode
+    }
+}
+
+final class FakeChainStorage: ChainStorage {
+    let http: any ChainHTTP = StubChainHTTP(mode: "fake")
+}
+
+/// A mock with a dependency of its own: a later selection that replaces it gets a new mock.
+protocol Gadget: AnyObject {
+    var part: any Part { get }
+}
+
+protocol Part: AnyObject {
+    var kind: String { get }
+}
+
+@Injectable(as: Part.self)
+final class LivePart: Part {
+    let kind = "live"
+}
+
+extension LivePart {
+    @Mock(Part.self, "special-part")
+    static var special: any Part { StubPart(kind: "special") }
+}
+
+final class StubPart: Part {
+    let kind: String
+
+    init(kind: String) {
+        self.kind = kind
+    }
+}
+
+final class MockGadget: Gadget {
+    @Inject var part: any Part
+
+    @Mock(Gadget.self, "gadget")
+    static var mock: MockGadget { MockGadget() }
+}
+
+/// A value with no `Hashable`: each injection of one is new.
+struct PlainSettings: Settings {
+    var theme: String
+}
+
+struct HashableSettings: Settings, Hashable {
+    var theme: String
+}
+
+/// Registered by hand, twice, the way a preview that reloads its code would.
+protocol Reloaded: AnyObject {}
+
+final class ReloadedImpl: Reloaded {}
+
 // MARK: Stops — resolved only inside exit tests
 
 protocol Duplicated {}
@@ -241,4 +343,64 @@ struct SecondMock: DoubleMocked {}
 /// Registered nowhere: `.inject` can't tell what it stands for.
 final class Unregistered: NoteStore {
     let scenario = "unregistered"
+}
+
+protocol MockCycleA: AnyObject {}
+
+protocol MockCycleB: AnyObject {}
+
+@Mock(MockCycleA.self)
+final class MockCycleAImpl: MockCycleA {
+    @Inject var b: any MockCycleB
+}
+
+@Mock(MockCycleB.self)
+final class MockCycleBImpl: MockCycleB {
+    @Inject var a: any MockCycleA
+}
+
+/// A `.singleton` holding a `.weak` through a `.transient` it keeps.
+protocol FarOwner: AnyObject {}
+
+protocol Middle: AnyObject {}
+
+protocol FarWeak: AnyObject {}
+
+@Injectable(as: FarOwner.self)
+final class FarOwnerImpl: FarOwner {
+    @Inject var middle: any Middle
+}
+
+@Injectable(as: Middle.self, .transient)
+final class MiddleImpl: Middle {
+    @Inject var far: any FarWeak
+}
+
+@Injectable(as: FarWeak.self, .weak)
+final class FarWeakImpl: FarWeak {}
+
+/// One type registered for two contracts: `.inject` can't tell which.
+protocol Twice: AnyObject {}
+
+final class DoubleDuty: Greeter, Twice {
+    func greet() -> String { "Hi" }
+
+    @Mock(Greeter.self, "double-greeter")
+    static var greeter: DoubleDuty { DoubleDuty() }
+
+    @Mock(Twice.self, "double-twice")
+    static var twice: DoubleDuty { DoubleDuty() }
+}
+
+/// Two mocks with one name for one contract.
+protocol Named: AnyObject {}
+
+final class FirstNamed: Named {
+    @Mock(Named.self, "same")
+    static var same: FirstNamed { FirstNamed() }
+}
+
+final class SecondNamed: Named {
+    @Mock(Named.self, "same")
+    static var same: SecondNamed { SecondNamed() }
 }
