@@ -253,9 +253,9 @@ gauge shows:
   growth of 0–32 KB.
 
 The tests pass under `leaks` (0 leaks) and under Address and Thread
-Sanitizer. They run on macOS with Swift 6.3.3 and 6.4.0 (65 tests), and on the
-iOS Simulator (35: the stops, the macro expansions, the sheet and the libraries
-compiled during the test need macOS).
+Sanitizer. They run on macOS with Swift 6.3.3 and 6.4.0 (58 tests), and on the
+iOS Simulator (28: the stops, the memory measurements, the macro expansions and
+the libraries compiled during the test need macOS).
 
 ## Limits
 
