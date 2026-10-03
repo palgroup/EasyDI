@@ -39,9 +39,27 @@ final class Container {
 
     /// Xcode sets this for the process that renders `#Preview`s.
     let isPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+    private var defaultMocksSet: Bool?
+
     /// Whether a contract with a default mock gets it when nothing is selected:
     /// in previews, and wherever the app turns it on (UI tests).
-    lazy var usesDefaultMocks = isPreview
+    ///
+    /// It can change only before anything is built: what was built keeps what it
+    /// got, and a kept `.singleton` would go on handing out the other one.
+    var usesDefaultMocks: Bool {
+        get { defaultMocksSet ?? isPreview }
+        set {
+            guard newValue != usesDefaultMocks else { return }
+            let built = builtNames()
+            if !built.isEmpty {
+                let shown = built.count > 3 ? built.prefix(3).joined(separator: ", ") + " and \(built.count - 3) more" : list(built)
+                fatalError(
+                    "EasyDI: Injection.usesDefaultMocks was turned \(newValue ? "on" : "off") after \(shown) \(built.count == 1 ? "was" : "were") built, and what is built keeps what it got. Set it before anything is resolved: first thing in the app's init."
+                )
+            }
+            defaultMocksSet = newValue
+        }
+    }
 
     private init() {
         Registry.start
@@ -232,10 +250,23 @@ final class Container {
         if !frame.dependencies.isEmpty {
             mock.dependencies.formUnion(frame.dependencies)
         }
+        mock.made += 1
         if !frame.usedSelection, !reached, Swift.type(of: frame.value as Any) is AnyClass {
             mock.shared = frame.value as AnyObject
         }
         return frame.value
+    }
+
+    /// Every provider and mock that built something, sorted.
+    private func builtNames() -> [String] {
+        let builtProviders = registered.values.joined().filter { $0.made > 0 }.map(\.name)
+        let builtMocks = mocks.values.joined().filter { $0.made > 0 }.map(\.label)
+        return (builtProviders + builtMocks).sorted()
+    }
+
+    private func list(_ names: [String]) -> String {
+        guard let last = names.last, names.count > 1 else { return names.first ?? "" }
+        return names.dropLast().joined(separator: ", ") + " and " + last
     }
 
     /// Runs the record classes again, once per miss: true when that registered
@@ -293,6 +324,9 @@ final class Container {
         load()
         let type = Swift.type(of: value)
         let contracts = contractsByType[ObjectIdentifier(type)] ?? []
+        if contracts.isEmpty, isPreview, reloadPreviewRecords() {
+            return contract(of: value)
+        }
         guard contracts.count == 1, let contract = contracts.first else {
             let reason = contracts.isEmpty
                 ? "\(type) isn't marked @Injectable or @Mock, so it isn't known what it stands for"
@@ -376,6 +410,7 @@ class AnyMock {
     let label: String
     /// Every contract resolved while it was built, its dependencies' too.
     var dependencies: Set<ObjectIdentifier> = []
+    var made = 0
 
     init(contract: ObjectIdentifier, contractName: String, name: String?, type: ObjectIdentifier?, label: String) {
         self.contract = contract

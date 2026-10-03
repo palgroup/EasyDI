@@ -2,6 +2,27 @@
 
 All notable changes to EasyDI are documented here.
 
+## [2.0.1] — 2026-10-03
+
+### Changed
+
+- Changing `Injection.usesDefaultMocks` after a provider or mock was built now
+  stops the app, naming what was built. Before, a kept `.singleton` went on
+  handing out what it was built with, so the app mixed mocks and real services.
+  Set it first thing in the app's init. Tests that turned it on and off per
+  test stop now: pick mocks with `Injection.with(.mock(…))` or hand in
+  instances with `.inject(…)` instead.
+
+### Fixed
+
+- `.inject(instance)` in a preview looks for records the canvas loaded late, as
+  a provider or mock lookup already did, before stopping with "isn't marked
+  @Injectable or @Mock".
+
+### Documentation
+
+- Why `@State @Inject` doesn't compile, and what to write instead.
+
 ## [2.0.0] — 2026-10-03
 
 ### Breaking

@@ -53,6 +53,22 @@ struct LateImageTests {
         }
     }
 
+    @Test("In a preview, .inject finds a record class loaded after the first resolution")
+    func previewInjectFindsRecordClasses() async throws {
+        let library = try buildPlugin(named: "ClassOnly", source: classOnlySource).path
+        await #expect(processExitsWith: .success) { [library = library as String] in
+            setenv("XCODE_RUNNING_FOR_PREVIEWS", "1", 1)
+            let injected = await MainActor.run { () -> Bool in
+                let _: any Greeter = resolve()
+                guard let handle = dlopen(library, RTLD_NOW), let symbol = dlsym(handle, "easydi_class_only_injects") else {
+                    return false
+                }
+                return unsafeBitCast(symbol, to: (@convention(c) () -> Bool).self)()
+            }
+            exit(injected ? EXIT_SUCCESS : EXIT_FAILURE)
+        }
+    }
+
     @Test("Outside a preview, a record that is only a class isn't used")
     func recordClassesOnlyInPreviews() async throws {
         let library = try buildPlugin(named: "ClassOnly", source: classOnlySource).path
@@ -101,6 +117,20 @@ func resolvesClassOnly() -> Bool {
 @_cdecl("easydi_class_only_resolves")
 public func classOnlyResolves() -> Bool {
     MainActor.assumeIsolated { resolvesClassOnly() }
+}
+
+@MainActor
+func classOnlyValue() -> any ClassOnlyContract {
+    @Inject var value: any ClassOnlyContract
+    return value
+}
+
+@_cdecl("easydi_class_only_injects")
+public func classOnlyInjects() -> Bool {
+    MainActor.assumeIsolated {
+        let instance = ClassOnlyProvider()
+        return Injection.with(.inject(instance)) { classOnlyValue() } === instance
+    }
 }
 """
 

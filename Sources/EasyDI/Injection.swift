@@ -22,6 +22,9 @@ public enum Injection {
     /// Whether a contract with a default mock gets it when nothing is selected for
     /// it. On in previews. Turn it on at launch, before anything is resolved, for UI
     /// tests that should see the mocks instead of the real services.
+    ///
+    /// Changing it after a provider or mock was built stops the app, naming what was
+    /// built: that keeps what it got, so the app would mix mocks and real services.
     @MainActor
     public static var usesDefaultMocks: Bool {
         get { Container.shared.usesDefaultMocks }

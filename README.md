@@ -84,6 +84,27 @@ final class NoteListData {
 - `@Injectable` and `@Observable` can sit on the same class. Everyone gets the
   same instance, and observation works through the protocol.
 
+### `@State @Inject` doesn't compile
+
+```swift
+@State @Inject private var draft: Draft   // doesn't compile: nothing builds the State
+```
+
+Property wrappers stacked without an initial value are built with the outer
+one's `init()`, and `State` has one only for an optional value. What to write
+instead:
+
+- In a screen's `@Observable` data, `@Inject` the shared object and let the
+  view read it through the data. SwiftUI observes what `body` reads, however
+  it got there.
+- In a view, `@Inject` alone: `@Inject private var counter: any Counter`. It
+  resolves each time the view is initialised; a `.singleton` or `.weak`
+  provider hands out the same instance, and the view observes what it reads.
+- For an instance the view owns (a `.transient` one), give `@State` an initial
+  value: `@State private var draft = Inject<Draft>().wrappedValue`. As with any
+  `@State` holding a class, that runs whenever the view is initialised and
+  SwiftUI keeps the first. `$draft.text` binds to it.
+
 ## Mocks
 
 ```swift
@@ -173,7 +194,10 @@ let other = Injection.with(.inject(spy, as: (any NoteService).self)) { NoteListD
 ```
 
 UI tests that should see the mocks instead of the real services turn the
-default mocks on at launch, before anything is resolved:
+default mocks on at launch, before anything is resolved. Changing it after a
+provider or mock was built stops the app: what was built keeps what it got.
+So unit tests don't switch it per test; they pick mocks with
+`Injection.with(.mock(…))` or hand in instances with `.inject(…)`.
 
 ```swift
 // in the app's init, when a launch argument the UI test passes is present
@@ -184,7 +208,7 @@ Injection.usesDefaultMocks = true
 
 Each of these stops the app. The provider and mock mistakes stop when that
 contract is first asked for; an unknown mock name stops where `.mock(…)` is
-written.
+written, and a late `usesDefaultMocks` where it is set.
 
 | Mistake | Message |
 |---|---|
@@ -194,6 +218,7 @@ written.
 | Providers or mocks that need each other | `LiveA → LiveB → LiveA is a cycle: each one needs the next to be built.` |
 | Two default mocks, or two mocks with one name | `NoteService has two default mocks: MockA and MockB. Keep one.` |
 | `.mock("faling")` | `no mock is named "faling". Named mocks: "empty", "failing".` |
+| `usesDefaultMocks` changed after something was built | `Injection.usesDefaultMocks was turned on after AppSession and LiveNoteService were built, and what is built keeps what it got.` |
 
 The macros report at compile time: `.weak` on a value type, a generic type,
 `@Mock` on an instance property.
@@ -254,7 +279,7 @@ gauge shows:
   growth of 0–32 KB.
 
 The tests pass under `leaks` (0 leaks) and under Address and Thread
-Sanitizer. They run on macOS with Swift 6.3.3 and 6.4.0 (58 tests), and on the
+Sanitizer. They run on macOS with Swift 6.3.3 and 6.4.0 (62 tests), and on the
 iOS Simulator (28: the stops, the memory measurements, the macro expansions and
 the libraries compiled during the test need macOS).
 

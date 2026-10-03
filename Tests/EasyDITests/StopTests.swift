@@ -151,17 +151,58 @@ struct PreviewTests {
     func defaultMocksOnRequest() async {
         await #expect(processExitsWith: .success) {
             let passed = await MainActor.run {
-                let before = NotesData()
+                let offByDefault = !Injection.usesDefaultMocks
                 Injection.usesDefaultMocks = true
-                let after = NotesData()
+                let data = NotesData()
                 let selected = Injection.with(.mock("failing")) { NotesData() }
-                return before.store.scenario == "live"
-                    && after.store.scenario == "seeded"
-                    && after.weather.forecast == "live"
+                // Setting the value it already has changes nothing, so it doesn't stop.
+                Injection.usesDefaultMocks = true
+                return offByDefault
+                    && data.store.scenario == "seeded"
+                    && data.weather.forecast == "live"
                     && selected.store.scenario == "failing"
             }
             exit(passed ? EXIT_SUCCESS : EXIT_FAILURE)
         }
+    }
+
+    @Test("Turning usesDefaultMocks on after something was built")
+    func defaultMocksTurnedOnLate() async {
+        let result = await #expect(processExitsWith: .failure, observing: [\.standardErrorContent]) {
+            await MainActor.run {
+                _ = NotesData()
+                Injection.usesDefaultMocks = true
+            }
+        }
+        let message = text(result?.standardErrorContent)
+        #expect(message.contains(
+            "EasyDI: Injection.usesDefaultMocks was turned on after LiveNoteStore and LiveWeather were built, and what is built keeps what it got. Set it before anything is resolved: first thing in the app's init."
+        ))
+    }
+
+    @Test("Turning usesDefaultMocks on after one provider was built")
+    func defaultMocksTurnedOnAfterOne() async {
+        let result = await #expect(processExitsWith: .failure, observing: [\.standardErrorContent]) {
+            await MainActor.run {
+                let _: any Weather = resolve()
+                Injection.usesDefaultMocks = true
+            }
+        }
+        let message = text(result?.standardErrorContent)
+        #expect(message.contains("EasyDI: Injection.usesDefaultMocks was turned on after LiveWeather was built, and what is built keeps what it got."))
+    }
+
+    @Test("Turning usesDefaultMocks off after a mock was built")
+    func defaultMocksTurnedOffLate() async {
+        let result = await #expect(processExitsWith: .failure, observing: [\.standardErrorContent]) {
+            await MainActor.run {
+                Injection.usesDefaultMocks = true
+                _ = NotesData()
+                Injection.usesDefaultMocks = false
+            }
+        }
+        let message = text(result?.standardErrorContent)
+        #expect(message.contains("EasyDI: Injection.usesDefaultMocks was turned off after LiveWeather and MockNoteStore were built"))
     }
 
     @Test("In a preview, a contract gets its default mock, or its provider when it has none")
