@@ -19,7 +19,7 @@ final class NoteListData {
 
 There is no registration list. `@Injectable` leaves a record in the binary,
 and EasyDI finds every record the first time something is resolved. Previews
-use mocks without any setup, and a screen can be told which mock to use:
+use mocks without any setup, and a preview can name the mock it wants:
 
 ```swift
 @Mock(NoteService.self)
@@ -29,7 +29,7 @@ final class MockNoteService: NoteService {
 }
 
 #Preview("Error") {
-    NoteListBuilder.build().mock("failing")
+    Injection.with(.mock("failing")) { NoteListScreen(data: NoteListData()) }
 }
 ```
 
@@ -99,63 +99,84 @@ final class MockNoteService: NoteService {
 
 Which one a request gets:
 
-1. A selection around it: `.inject(instance)`, then `.mock("name")`.
-2. In a preview, the contract's default mock.
+1. A selection around it (`Injection.with`): `.inject(instance)` or `.mock("name")`.
+2. In a preview, or with `Injection.usesDefaultMocks` on, the contract's
+   default mock.
 3. The `@Injectable` provider.
 
-The app never uses a mock unless it is selected. A selected mock is shared
+The app never uses a mock unless it is selected or `usesDefaultMocks` is on. A selected mock is shared
 while something holds it, like a `.weak` provider. Tests that run in parallel
 and count calls on a mock should inject their own instance instead:
 `.inject(spy, as: (any NoteService).self)`.
 
 Mock types ship in release builds unless you wrap them in `#if DEBUG`.
 
-## Choosing mocks for a screen
+## Choosing mocks
 
-A selection only reaches what is built inside `Injected`. Build each screen
-with it:
+Screens stay plain; a preview names the mock it wants, and one preview host
+applies it while it builds the screen:
 
 ```swift
 enum NoteListBuilder {
     static func build() -> some View {
-        Injected { NoteListScreen(data: NoteListData()) }
+        NoteListScreen(data: NoteListData())
+    }
+
+    static func mock(_ name: String? = nil) -> some View {
+        PreviewHost(mock: name) { build() }
     }
 }
 
-#Preview("Loaded") { NoteListBuilder.build() }                    // the default mock
-#Preview("Empty") { NoteListBuilder.build().mock("empty") }
-#Preview("Error") { NoteListBuilder.build().mock("failing") }
-#Preview("Mine") { NoteListBuilder.build().inject(MockNoteService(scenario: .stalled)) }
+struct PreviewHost<Content: View>: View {
+    let mock: String?
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if let mock {
+            Injection.with(.mock(mock)) { content() }
+        } else {
+            content()
+        }
+    }
+}
+
+#Preview("Loaded") { NoteListBuilder.mock() }             // the default mock
+#Preview("Empty") { NoteListBuilder.mock("empty") }
+#Preview("Error") { NoteListBuilder.mock("failing") }
 ```
+
+`Injection.with` builds what its closure returns with the selection in effect;
+everything that closure initialises, and their own `@Inject` properties, get
+the selected mocks.
 
 - `.mock("failing")` picks the mock named "failing" for every contract that
   has one. Contracts without one keep their provider, or their default mock in
   a preview.
-- For each contract the innermost choice wins: `.mock("empty")` inside
-  `.mock("failing")` gives "empty" to the contracts that have both.
 - `.mock("failing", for: (any NoteService).self)` picks it for one contract.
 - `.inject(instance)` uses that instance for the contract its type is
   registered for. For a type registered nowhere, use
   `.inject(instance, as: (any NoteService).self)`.
-- Make an injected instance once, outside `body` (a `let`, a `@State`, the
-  preview's own body). An object made in a `body` is a new one on every
-  redraw, and a new instance rebuilds the screen. An equal `Hashable` value
-  counts as the same.
-- The selection is in the environment, so screens pushed or presented from
-  this one get it too, as long as they are built with their own `Injected`.
-- When the selection changes, `Injected` builds its content again with new
-  data. With `@Previewable @State`, a preview can switch mocks live. On other
-  redraws SwiftUI may run the content closure again, as it does any view's
-  initialiser; the screen keeps the data its `@State` got first.
+- `Injection.with(.mock("failing"), .mock("empty")) { … }`: for each contract
+  the later choice wins, and a nested `Injection.with` wins over the outer one.
+- The selection reaches what is initialised inside the closure. A view that
+  builds its own data later, when SwiftUI draws it, gets the default mock.
 - A provider built inside a selection, with a selected mock in it, isn't
   kept for the rest of the app. A kept provider whose dependency the selection
   replaces is built again for the selection.
 
-Outside SwiftUI, for example in a unit test:
+The same in a unit test:
 
 ```swift
 let data = Injection.with(.mock("failing")) { NoteListData() }
 let other = Injection.with(.inject(spy, as: (any NoteService).self)) { NoteListData() }
+```
+
+UI tests that should see the mocks instead of the real services turn the
+default mocks on at launch, before anything is resolved:
+
+```swift
+// in the app's init, when a launch argument the UI test passes is present
+Injection.usesDefaultMocks = true
 ```
 
 ## Mistakes stop the app, naming what to fix
@@ -208,7 +229,7 @@ process. If a contract is still missing, it looks again before stopping.
 
 Resolution is synchronous, on the main actor, while the owner is initialised.
 That is why a provider's dependencies can be checked as it is built, and why
-`Injected` can apply a screen's selection while the screen's data is made.
+`Injection.with` can apply a selection while a screen's data is made.
 
 ## Performance
 

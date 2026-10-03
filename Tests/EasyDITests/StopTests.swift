@@ -34,7 +34,7 @@ struct StopTests {
             await MainActor.run { let _: any OnlyMocked = resolve() }
         }
         let message = text(result?.standardErrorContent)
-        #expect(message.contains("Its mocks are used only in previews and under .mock(…)."))
+        #expect(message.contains("Its mocks are used only in previews, under Injection.with(.mock(…)) and with Injection.usesDefaultMocks."))
     }
 
     @Test("A .singleton takes something .weak")
@@ -147,6 +147,23 @@ struct StopTests {
 
 @Suite("Previews")
 struct PreviewTests {
+    @Test("usesDefaultMocks gives the default mocks outside a preview, as UI tests want")
+    func defaultMocksOnRequest() async {
+        await #expect(processExitsWith: .success) {
+            let passed = await MainActor.run {
+                let before = NotesData()
+                Injection.usesDefaultMocks = true
+                let after = NotesData()
+                let selected = Injection.with(.mock("failing")) { NotesData() }
+                return before.store.scenario == "live"
+                    && after.store.scenario == "seeded"
+                    && after.weather.forecast == "live"
+                    && selected.store.scenario == "failing"
+            }
+            exit(passed ? EXIT_SUCCESS : EXIT_FAILURE)
+        }
+    }
+
     @Test("In a preview, a contract gets its default mock, or its provider when it has none")
     func previewUsesDefaultMock() async {
         await #expect(processExitsWith: .success) {

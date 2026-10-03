@@ -1,18 +1,16 @@
-import Synchronization
-
 extension Injection {
-    /// Which mocks and instances answer for their contracts in a scope.
+    /// Which mocks and instances answer for their contracts while something is built
+    /// with ``Injection/with(_:build:)``.
     ///
-    /// Made with ``mock(_:)``, ``mock(_:for:)``, ``inject(_:)`` and ``inject(_:as:)``;
-    /// SwiftUI's modifiers of the same names put one in the environment. For each
-    /// contract the innermost choice that applies to it wins.
-    public struct Selection: Hashable {
-        private enum Choice: Hashable {
+    /// Made with ``mock(_:)``, ``mock(_:for:)``, ``inject(_:)`` and ``inject(_:as:)``.
+    /// For each contract the innermost choice that applies to it wins.
+    public struct Selection {
+        private enum Choice {
             /// The mock with this name, for every contract that has one.
             case everywhere(String)
             /// The mock with this name, for one contract.
             case named(String, contract: ObjectIdentifier)
-            case instance(Instance, contract: ObjectIdentifier)
+            case instance(Any, contract: ObjectIdentifier)
         }
 
         /// What a selection gives for a contract.
@@ -29,7 +27,7 @@ extension Injection {
         var isEmpty: Bool { choices.isEmpty }
 
         /// The mock named `name`, for every contract that has one by that name.
-        /// The others keep their provider (or, in a preview, their default mock).
+        /// The others keep their provider (or their default mock, where those are used).
         @MainActor
         public static func mock(_ name: String) -> Selection {
             Container.shared.requireMock(named: name, for: nil, contractName: nil)
@@ -47,12 +45,12 @@ extension Injection {
         /// `value` for the contract its type is registered for, with `@Injectable` or `@Mock`.
         @MainActor
         public static func inject<Value>(_ value: Value) -> Selection {
-            Selection(choices: [.instance(Instance(value), contract: Container.shared.contract(of: value))])
+            Selection(choices: [.instance(value, contract: Container.shared.contract(of: value))])
         }
 
         /// `value` for `contract`.
         public static func inject<Contract>(_ value: Contract, as contract: Contract.Type) -> Selection {
-            Selection(choices: [.instance(Instance(value), contract: ObjectIdentifier(Contract.self))])
+            Selection(choices: [.instance(value, contract: ObjectIdentifier(Contract.self))])
         }
 
         private init(choices: [Choice]) {
@@ -68,8 +66,8 @@ extension Injection {
         func answer(for contract: ObjectIdentifier, among mocks: [AnyMock]) -> Answer? {
             for choice in choices.reversed() {
                 switch choice {
-                case .instance(let instance, contract):
-                    return .instance(instance.value)
+                case .instance(let value, contract):
+                    return .instance(value)
                 case .named(let name, contract):
                     return .mock(name)
                 case .everywhere(let name) where mocks.contains(where: { $0.name == name }):
@@ -84,35 +82,6 @@ extension Injection {
         private static func name(of type: Any.Type) -> String {
             let name = String(describing: type)
             return name.hasPrefix("any ") ? String(name.dropFirst("any ".count)) : name
-        }
-    }
-
-    /// An injected value. Two are the same while they are the same object, or an
-    /// equal `Hashable` value: a screen is rebuilt only when the value changes. Any
-    /// other value is new each time it is injected.
-    struct Instance: Hashable {
-        private static let made = Atomic<Int>(0)
-
-        let value: Any
-        private let identity: AnyHashable
-
-        init(_ value: Any) {
-            self.value = value
-            if type(of: value) is AnyClass {
-                identity = ObjectIdentifier(value as AnyObject)
-            } else if let hashable = value as? AnyHashable {
-                identity = hashable
-            } else {
-                identity = Self.made.add(1, ordering: .relaxed).newValue
-            }
-        }
-
-        static func == (lhs: Instance, rhs: Instance) -> Bool {
-            lhs.identity == rhs.identity
-        }
-
-        func hash(into hasher: inout Hasher) {
-            hasher.combine(identity)
         }
     }
 }

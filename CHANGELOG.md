@@ -2,6 +2,35 @@
 
 All notable changes to EasyDI are documented here.
 
+## [2.0.0] — 2026-10-03
+
+### Breaking
+
+- **`Injected` and the `.mock(_:)`, `.mock(_:for:)`, `.inject(_:)` and
+  `.inject(_:as:)` view modifiers are removed.** Every screen's builder had to
+  wrap its content in `Injected { }` so a selection in the environment could
+  reach the screen's data. Previews don't navigate and apps don't select
+  mocks, so one place is enough: the preview host builds the screen inside
+  `Injection.with(.mock("failing")) { … }`.
+- `Injection.Selection` is no longer `Hashable`: it only told `Injected` when
+  to build its content again.
+
+### Added
+
+- `Injection.usesDefaultMocks`: contracts with a default mock get it when
+  nothing is selected, as in a preview. Turn it on at launch for UI tests that
+  should see the mocks.
+
+### Migration
+
+    // 1.x
+    static func build() -> some View { Injected { NoteListScreen(data: NoteListData()) } }
+    #Preview { NoteListBuilder.build().mock("failing") }
+
+    // 2.0
+    static func build() -> some View { NoteListScreen(data: NoteListData()) }
+    #Preview { Injection.with(.mock("failing")) { NoteListBuilder.build() } }
+
 ## [1.0.1] — 2026-10-02
 
 ### Fixed

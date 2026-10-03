@@ -275,15 +275,6 @@ final class MockGadget: Gadget {
     static var mock: MockGadget { MockGadget() }
 }
 
-/// A value with no `Hashable`: each injection of one is new.
-struct PlainSettings: Settings {
-    var theme: String
-}
-
-struct HashableSettings: Settings, Hashable {
-    var theme: String
-}
-
 /// Registered by hand, twice, the way a preview that reloads its code would.
 protocol Reloaded: AnyObject {}
 

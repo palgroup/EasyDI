@@ -7,8 +7,9 @@
 /// }
 /// ```
 ///
-/// The value comes from the selection in effect (``Injected``, ``Injection/with(_:build:)``),
-/// then, in a preview, from the default mock, then from the `@Injectable` provider.
+/// The value comes from the selection in effect (``Injection/with(_:build:)``), then
+/// from the default mock where those are used (previews, ``Injection/usesDefaultMocks``),
+/// then from the `@Injectable` provider.
 /// In an `@Observable` class the property needs `@ObservationIgnored`: it never changes.
 @MainActor
 @propertyWrapper

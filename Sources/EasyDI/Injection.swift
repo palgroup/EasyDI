@@ -1,4 +1,4 @@
-/// Selecting mocks or instances outside SwiftUI, and what is registered.
+/// Choosing mocks or instances, and what is registered.
 public enum Injection {
     /// Builds `build` with `selections` in effect: what it injects, and what that
     /// injects in turn, comes from the selected mocks and instances.
@@ -7,7 +7,8 @@ public enum Injection {
     /// let data = Injection.with(.mock("failing")) { NoteListData() }
     /// ```
     ///
-    /// In SwiftUI use ``Injected`` with the `.mock(_:)` and `.inject(_:)` modifiers instead.
+    /// A preview host builds its screen this way, so the screen's data gets the
+    /// mock the preview names.
     @MainActor
     public static func with<Result>(_ selections: Selection..., build: () -> Result) -> Result {
         let container = Container.shared
@@ -16,6 +17,15 @@ public enum Injection {
             selection = selection.merging(added)
         }
         return container.with(selection, build)
+    }
+
+    /// Whether a contract with a default mock gets it when nothing is selected for
+    /// it. On in previews. Turn it on at launch, before anything is resolved, for UI
+    /// tests that should see the mocks instead of the real services.
+    @MainActor
+    public static var usesDefaultMocks: Bool {
+        get { Container.shared.usesDefaultMocks }
+        set { Container.shared.usesDefaultMocks = newValue }
     }
 
     /// Every registered contract with its provider and mocks, sorted by contract.

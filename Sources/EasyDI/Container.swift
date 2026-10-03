@@ -6,7 +6,7 @@ import Synchronization
 /// Resolution happens on the main actor, synchronously, while the owner of an
 /// ``Inject`` property is initialised. That is what lets a provider's own
 /// dependencies be checked while it is built (cycles, a `.singleton` taking a `.weak`),
-/// and what lets ``Injected`` apply a screen's selection while the screen's data is made.
+/// and what lets ``Injection/with(_:build:)`` apply a selection while a screen's data is made.
 @MainActor
 final class Container {
     static let shared = Container()
@@ -39,6 +39,9 @@ final class Container {
 
     /// Xcode sets this for the process that renders `#Preview`s.
     let isPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+    /// Whether a contract with a default mock gets it when nothing is selected:
+    /// in previews, and wherever the app turns it on (UI tests).
+    lazy var usesDefaultMocks = isPreview
 
     private init() {
         Registry.start
@@ -110,7 +113,7 @@ final class Container {
             case .mock(let name): return mock(key, named: name)
             }
         }
-        if isPreview, mocks[key]?.contains(where: { $0.name == nil }) == true {
+        if usesDefaultMocks, mocks[key]?.contains(where: { $0.name == nil }) == true {
             return mock(key, named: nil)
         }
         let provider: Provider<Value> = provider(for: key)
@@ -152,7 +155,7 @@ final class Container {
                 return self.provider(for: key)
             }
             let contract = name(of: Value.self)
-            let onlyMocks = mocks[key].map { _ in " Its mocks are used only in previews and under .mock(…)." } ?? ""
+            let onlyMocks = mocks[key].map { _ in " Its mocks are used only in previews, under Injection.with(.mock(…)) and with Injection.usesDefaultMocks." } ?? ""
             fatalError("EasyDI: nothing provides \(contract). Mark the type that does with @Injectable(as: \(contract).self).\(onlyMocks)")
         }
         providers[key] = provider

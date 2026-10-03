@@ -31,8 +31,9 @@ public macro Injectable(_ lifetime: Lifetime = .singleton) =
 /// ```
 ///
 /// A preview with nothing selected uses the default mock (the provider if there is
-/// none); `.mock("failing")` picks a named one for a screen and everything it opens.
-/// The app never uses a mock unless it is selected.
+/// none); `Injection.with(.mock("failing")) { … }` picks a named one for what it
+/// builds. The app never uses a mock unless it is selected or
+/// ``Injection/usesDefaultMocks`` is on.
 @attached(peer, names: prefixed(__easyDIMock_), prefixed(__EasyDIMock_))
 public macro Mock(_ contract: Any.Type, _ name: String? = nil) =
     #externalMacro(module: "EasyDIMacros", type: "MockMacro")

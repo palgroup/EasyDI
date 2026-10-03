@@ -117,15 +117,4 @@ struct MockTests {
         #expect(overInstance.store.scenario == "empty")
         #expect(instance.store === mine)
     }
-
-    @Test("Injected values are the same while equal objects or Hashable values; others are new each time")
-    func injectedIdentity() {
-        let store = MockNoteStore(scenario: "one")
-        #expect(Injection.Selection.inject(store) == .inject(store))
-        #expect(Injection.Selection.inject(MockNoteStore()) != .inject(MockNoteStore()))
-        let dark = HashableSettings(theme: "dark")
-        #expect(Injection.Selection.inject(dark, as: (any Settings).self) == .inject(dark, as: (any Settings).self))
-        let plain = PlainSettings(theme: "dark")
-        #expect(Injection.Selection.inject(plain, as: (any Settings).self) != .inject(plain, as: (any Settings).self))
-    }
 }
