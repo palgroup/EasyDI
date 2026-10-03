@@ -39,7 +39,7 @@ Other platforms aren't supported.
 ## Installation
 
 ```swift
-.package(url: "https://github.com/palgroup/EasyDI.git", from: "1.0.0")
+.package(url: "https://github.com/palgroup/EasyDI.git", from: "2.0.0")
 ```
 
 Add the `EasyDI` product to your target. The first build asks Xcode to trust
@@ -150,8 +150,8 @@ everything that closure initialises, and their own `@Inject` properties, get
 the selected mocks.
 
 - `.mock("failing")` picks the mock named "failing" for every contract that
-  has one. Contracts without one keep their provider, or their default mock in
-  a preview.
+  has one. Contracts without one keep their provider, or their default mock
+  where default mocks are used (previews, `Injection.usesDefaultMocks`).
 - `.mock("failing", for: (any NoteService).self)` picks it for one contract.
 - `.inject(instance)` uses that instance for the contract its type is
   registered for. For a type registered nowhere, use
@@ -159,7 +159,8 @@ the selected mocks.
 - `Injection.with(.mock("failing"), .mock("empty")) { … }`: for each contract
   the later choice wins, and a nested `Injection.with` wins over the outer one.
 - The selection reaches what is initialised inside the closure. A view that
-  builds its own data later, when SwiftUI draws it, gets the default mock.
+  builds its own data later, when SwiftUI draws it, is outside it: in a
+  preview it gets the default mock.
 - A provider built inside a selection, with a selected mock in it, isn't
   kept for the rest of the app. A kept provider whose dependency the selection
   replaces is built again for the selection.
