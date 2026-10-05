@@ -186,6 +186,15 @@ the selected mocks.
   kept for the rest of the app. A kept provider whose dependency the selection
   replaces is built again for the selection.
 
+A debug screen inside the running app that shows mocked screens has no preview
+to give it default mocks. Select them: `.defaultMocks` gives every contract its
+default mock (the others keep their provider), and a named mock after it wins
+where it applies.
+
+```swift
+Injection.with(.defaultMocks, .mock("empty")) { NoteListBuilder.build() }
+```
+
 The same in a unit test:
 
 ```swift
@@ -279,8 +288,8 @@ gauge shows:
   growth of 0–32 KB.
 
 The tests pass under `leaks` (0 leaks) and under Address and Thread
-Sanitizer. They run on macOS with Swift 6.3.3 and 6.4.0 (62 tests), and on the
-iOS Simulator (28: the stops, the memory measurements, the macro expansions and
+Sanitizer. They run on macOS with Swift 6.3.3 and 6.4.0 (65 tests), and on the
+iOS Simulator (31: the stops, the memory measurements, the macro expansions and
 the libraries compiled during the test need macOS).
 
 ## Limits

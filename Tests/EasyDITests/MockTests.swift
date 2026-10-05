@@ -117,4 +117,27 @@ struct MockTests {
         #expect(overInstance.store.scenario == "empty")
         #expect(instance.store === mine)
     }
+
+    @Test(".defaultMocks gives each contract its default mock, outside a preview")
+    func defaultMocksOutsideAPreview() {
+        let data = Injection.with(.defaultMocks) { NotesData() }
+        #expect(data.store.scenario == "seeded")
+        // Weather has no default mock: it keeps its provider.
+        #expect(data.weather.forecast == "live")
+    }
+
+    @Test("A named mock chosen after .defaultMocks wins for the contracts that have it")
+    func namedAfterDefaultMocks() {
+        let data = Injection.with(.defaultMocks, .mock("failing")) { NotesData() }
+        #expect(data.store.scenario == "failing")
+        #expect(data.weather.forecast == "failing")
+    }
+
+    @Test("A provider built under .defaultMocks isn't kept for the app")
+    func defaultMocksDoNotLeak() {
+        let selected: any Inbox = Injection.with(.defaultMocks) { resolve() }
+        @Inject var app: any Inbox
+        #expect(selected.store.scenario == "seeded")
+        #expect(app.store.scenario == "live")
+    }
 }

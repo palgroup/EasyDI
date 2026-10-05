@@ -2,6 +2,15 @@
 
 All notable changes to EasyDI are documented here.
 
+## [2.1.0] — 2026-10-05
+
+### Added
+
+- `Injection.Selection.defaultMocks`: every contract's default mock, for screens
+  built inside the running app (debug screens that show mocked screens), where
+  no preview gives them by itself and `usesDefaultMocks` can no longer change.
+  A named mock selected after it wins for the contracts that have one.
+
 ## [2.0.1] — 2026-10-03
 
 ### Changed

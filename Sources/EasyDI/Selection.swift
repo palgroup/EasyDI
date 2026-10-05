@@ -11,18 +11,29 @@ extension Injection {
             /// The mock with this name, for one contract.
             case named(String, contract: ObjectIdentifier)
             case instance(Any, contract: ObjectIdentifier)
+            /// The default mock, for every contract that has one.
+            case defaults
         }
 
         /// What a selection gives for a contract.
         enum Answer {
             case instance(Any)
-            case mock(String)
+            /// `nil`: the contract's default mock.
+            case mock(String?)
         }
 
         /// In the order they were made: outer first, so the last that applies wins.
         private var choices: [Choice] = []
 
         public init() {}
+
+        /// Every contract's default mock, where it has one; the others keep their
+        /// provider. What a preview gets by itself, for screens built inside the
+        /// running app — a debug screen that shows mocked screens.
+        @MainActor
+        public static var defaultMocks: Selection {
+            Selection(choices: [.defaults])
+        }
 
         var isEmpty: Bool { choices.isEmpty }
 
@@ -72,6 +83,8 @@ extension Injection {
                     return .mock(name)
                 case .everywhere(let name) where mocks.contains(where: { $0.name == name }):
                     return .mock(name)
+                case .defaults where mocks.contains(where: { $0.name == nil }):
+                    return .mock(nil)
                 default:
                     continue
                 }
